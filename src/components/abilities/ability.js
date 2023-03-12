@@ -2,7 +2,10 @@
 const abilityList = ['add', 'edit', 'delete', 'export', 'import']
 
 function abilityDetails(controlHeader) {
-  let returns = {}
+  let returns = {
+    display_table_header: false,
+    abilities: abilityList,
+  }
   if (controlHeader) {
     if (controlHeader.toLowerCase() == 'controls') {
       if (abilityList.includes('edit') == false && abilityList.includes('delete') == false) {

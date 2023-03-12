@@ -1,10 +1,15 @@
 /* eslint-disable */
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTable, useFilters, useGlobalFilter, useAsyncDebounce, usePagination } from 'react-table'
-// A great library for fuzzy filtering/sorting items
-import { matchSorter } from 'match-sorter'
-import { FaEdit, FaTrashAlt } from 'react-icons/fa'
 import abilityDetails from '../../../components/abilities/ability'
+import {
+  DefaultColumnFilter,
+  SelectColumnFilter,
+  NumberRangeColumnFilter,
+  fuzzyTextFilterFn,
+  existingColumns,
+  abilityList,
+} from './tableUtils'
 import {
   DefaultColumnFilterPropTypes,
   GlobalFilterPropTypes,
@@ -22,28 +27,28 @@ import {
   CFormSelect,
   CButton,
 } from '@coreui/react'
+import { useDispatch, useSelector, useStore } from 'react-redux'
 
+import { loading } from 'src/data/app/Loading/Store'
+import { listProcessPaginated, listProcess } from 'src/data/components/users/Thunk'
+
+import useDebounce from 'src/app/components/Global/useDebounce'
+import useDidMountEffect from 'src/app/components/Global/useDidMountEffect'
+
+let columns = []
+let rowData = []
 DefaultColumnFilter.propTypes = DefaultColumnFilterPropTypes
 GlobalFilter.propTypes = GlobalFilterPropTypes
 SelectColumnFilter.propTypes = SelectColumnFilterPropTypes
 NumberRangeColumnFilter.propTypes = NumberRangeColumnFilterPropTypes
 Table.propTypes = TablePropTypes
 
-const abilityList = ['add', 'edit', 'delete', 'export', 'import']
-
-function DataDisplayConditions(headerName) {
-  let returns = {
-    display_table_header: false,
-    abilities: abilityList,
-  }
-  if (headerName) {
-    const checkHeader = headerName.toLowerCase()
-    if (checkHeader == 'controls') {
-      returns['display_table_header'] = abilityDetails(checkHeader)['display_table_header']
-    }
-  }
-  return returns
-}
+const filterByOpt = [
+  { value: 'all', text: 'All' },
+  { value: 'campaign_code', text: 'Campaign Code' },
+  { value: 'subject', text: 'Subject' },
+  { value: 'model', text: `Affected Model/s` },
+]
 
 // Define a default UI for filtering
 function GlobalFilter({ preGlobalFilteredRows, globalFilter, setGlobalFilter }) {
@@ -72,133 +77,11 @@ function GlobalFilter({ preGlobalFilteredRows, globalFilter, setGlobalFilter }) 
   )
 }
 
-// Define a default UI for filtering
-function DefaultColumnFilter({ column: { filterValue, preFilteredRows, setFilter } }) {
-  const count = preFilteredRows.length
-
-  return (
-    <CFormInput
-      value={filterValue || ''}
-      onChange={(e) => {
-        setFilter(e.target.value || undefined) // Set undefined to remove the filter entirely
-      }}
-      placeholder={`Search ${count} records...`}
-    />
-  )
-}
-
-// This is a custom filter UI for selecting
-// a unique option from a list
-function SelectColumnFilter({ column: { filterValue, setFilter, preFilteredRows, id } }) {
-  // Calculate the options for filtering
-  // using the preFilteredRows
-  const options = React.useMemo(() => {
-    const options = new Set()
-    preFilteredRows.forEach((row) => {
-      options.add(row.values[id])
-    })
-    return [...options.values()]
-  }, [id, preFilteredRows])
-
-  // Render a multi-select box
-  return (
-    <CFormSelect
-      value={filterValue}
-      onChange={(e) => {
-        setFilter(e.target.value || undefined)
-      }}
-    >
-      <option value="">All</option>
-      {options.map((option, i) => (
-        <option key={i} value={option}>
-          {option}
-        </option>
-      ))}
-    </CFormSelect>
-  )
-}
-
-function NumberRangeColumnFilter({ column: { filterValue = [], preFilteredRows, setFilter, id } }) {
-  const [min, max] = React.useMemo(() => {
-    let min = preFilteredRows.length ? preFilteredRows[0].values[id] : 0
-    let max = preFilteredRows.length ? preFilteredRows[0].values[id] : 0
-    preFilteredRows.forEach((row) => {
-      min = Math.min(row.values[id], min)
-      max = Math.max(row.values[id], max)
-    })
-    return [min, max]
-  }, [id, preFilteredRows])
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-      }}
-    >
-      <CFormInput
-        value={filterValue[0] || ''}
-        type="number"
-        onChange={(e) => {
-          const val = e.target.value
-          setFilter((old = []) => [val ? parseInt(val, 10) : undefined, old[1]])
-        }}
-        placeholder={`Min (${min})`}
-        style={{
-          width: '70px',
-          marginRight: '0.5rem',
-        }}
-      />
-      to
-      <CFormInput
-        value={filterValue[1] || ''}
-        type="number"
-        onChange={(e) => {
-          const val = e.target.value
-          setFilter((old = []) => [old[0], val ? parseInt(val, 10) : undefined])
-        }}
-        placeholder={`Max (${max})`}
-        style={{
-          width: '70px',
-          marginLeft: '0.5rem',
-        }}
-      />
-    </div>
-  )
-}
-
-function fuzzyTextFilterFn(rows, id, filterValue) {
-  //Search Filter
-  const filterType = 'local'
-
-  //api filtering
-  console.log('Filter Search: ' + filterValue + ' on Filter Type: ' + filterType)
-  if (filterType == 'local') {
-    //local filtering
-    return matchSorter(rows, filterValue, { keys: [(row) => row.values[id]] })
-  }
-}
-
 // Let the table remove the filter if the string is empty
 fuzzyTextFilterFn.autoRemove = (val) => !val
+// --------------------------------------------------------------------------------------
 // Our table component
-function Table({ columns, data }) {
-  const filterTypes = React.useMemo(
-    () => ({
-      // Add a new fuzzyTextFilterFn filter type.
-      fuzzyText: fuzzyTextFilterFn,
-      // Or, override the default text filter to use
-      // "startWith"
-      text: (rows, id, filterValue) => {
-        return rows.filter((row) => {
-          const rowValue = row.values[id]
-          return rowValue !== undefined
-            ? String(rowValue).toLowerCase().startsWith(String(filterValue).toLowerCase())
-            : true
-        })
-      },
-    }),
-    [],
-  )
+function Table({ columns, data, setSearch }) {
 
   const defaultColumn = React.useMemo(
     () => ({
@@ -224,9 +107,11 @@ function Table({ columns, data }) {
   } = useTable(
     {
       columns,
-      data,
       defaultColumn,
-      filterTypes,
+      data: rowData,
+      filterTypes: {
+        fuzzyText: fuzzyTextFilterFn, // use the updated fuzzyTextFilterFn
+      },
     },
     useFilters,
     useGlobalFilter,
@@ -267,10 +152,9 @@ function Table({ columns, data }) {
             {headerGroups.map((headerGroup, i) => (
               <CRow key={i} {...headerGroup.getHeaderGroupProps()} className="rowStyle">
                 {headerGroup.headers.map((column) => {
-                  let displayHeader = DataDisplayConditions(column.render('Header'))[
+                  let displayHeader = abilityDetails(column.render('Header'))[
                     'display_table_header'
                   ]
-
                   return (
                     <CCol
                       key={column.id}
@@ -288,6 +172,7 @@ function Table({ columns, data }) {
                       <p style={{ textAlign: 'center', fontWeight: 'bold' }}>
                         {column.render('Header')}
                       </p>
+                      {console.log(column.render('Filter'))}
                       <div>{column.canFilter ? column.render('Filter') : null}</div>
                     </CCol>
                   )
@@ -301,9 +186,7 @@ function Table({ columns, data }) {
                 return (
                   <CRow key={i} className="rowStyle" {...row.getRowProps()}>
                     {row.cells.map((cell, i) => {
-                      let displayHeader = DataDisplayConditions(cell.column.id)[
-                        'display_table_header'
-                      ]
+                      let displayHeader = abilityDetails(cell.column.id)['display_table_header']
 
                       return (
                         <CCol
@@ -333,13 +216,6 @@ function Table({ columns, data }) {
 
       <CRow>
         <CCol lg={5}>
-          {/* <CButton
-            onClick={() => gotoPage(0)}
-            disabled={!canPreviousPage}
-            className="mr-2 btn btn-primary "
-          >
-            {'<<'}
-          </CButton> */}
           <CButton
             onClick={() => previousPage()}
             disabled={!canPreviousPage}
@@ -354,13 +230,6 @@ function Table({ columns, data }) {
           >
             {'>'}
           </CButton>
-          {/* <CButton
-            onClick={() => gotoPage(pageCount - 1)}
-            disabled={!canNextPage}
-            className="mr-2 btn btn-primary "
-          >
-            {'>>'}
-          </CButton> */}
         </CCol>
 
         <CCol lg={5}>
@@ -395,105 +264,91 @@ function Table({ columns, data }) {
   )
 }
 
-// Define a custom filter filter function!
-function filterGreaterThan(rows, id, filterValue) {
-  return rows.filter((row) => {
-    const rowValue = row.values[id]
-    return rowValue >= filterValue
-  })
-}
 
-filterGreaterThan.autoRemove = (val) => typeof val !== 'number'
-
+// --------------------------------------------------------------------------------------------------------
 function dataTable(props) {
-  const handleEditClick = (controlId) => {
-    console.log('Edit clicked for control:', controlId)
+  const state = useSelector((state) => state.campaign)
+  const dispatch = useDispatch()
+  const store = useStore()
+
+  // pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+  let limit = 10 // Default
+
+  //filtering and search
+  const [filterBy, setFilterBy] = useState(filterByOpt[0].value)
+  const [search, setSearch] = useState('')
+  const debounceQuery = useDebounce(search, 500)
+  let filterMode = true
+
+  let filteredObj = {}
+  filteredObj[filterBy] = { filter: debounceQuery }
+  filteredObj = JSON.stringify(filteredObj)
+
+  useEffect(() => {
+    async function init() {
+      dispatch(loading(true))
+      await dispatch(listProcessPaginated(currentPage, filteredObj, limit))
+      const item = store.getState().campaign.listPaginated
+      setTotalCount(item.total)
+      dispatch(loading(false))
+    }
+
+    init()
+  }, [dispatch])
+
+  useDidMountEffect(() => {
+    const search = async () => {
+      let page = 1
+      setCurrentPage(page)
+      await dispatch(listProcessPaginated(page, filteredObj, limit))
+      const item = store.getState().campaign.listPaginated
+      setTotalCount(item.total)
+    }
+
+    search()
+  }, [debounceQuery, filterBy])
+
+  const handlePageChange = async (page) => {
+    setCurrentPage(page)
+    await dispatch(listProcessPaginated(page, filteredObj, limit))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleDeleteClick = (controlId) => {
-    console.log('Delete clicked for control:', controlId)
+  const handleFilterBy = (e) => {
+    setFilterBy(e.target.value)
+    setCurrentPage(1)
   }
 
-  const [columns, setColumns] = React.useState([])
-  const [rowData, setrowData] = React.useState([])
+  if (state.listPaginated.rows) {
+    rowData = state.listPaginated?.rows
+    columns = state.listPaginated?.headers
+  }
+
   const filters = {
     NumberRangeColumnFilter: NumberRangeColumnFilter,
     fuzzyTextFilterFn: fuzzyTextFilterFn,
     SelectColumnFilter: SelectColumnFilter,
   }
-
-  React.useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await fetch('http://localhost/Sideline/data/userData.json')
-        const data = await response.json()
-        const columns = data.result.headers.map((header) => {
-          const filterName = header.Filter
-          if (filterName) {
-            const filterFunc = filters[filterName]
-            header.Filter = filterFunc
-          }
-          return header
-        })
-        setColumns(columns)
-        setrowData([...data.result.rows])
-      } catch (error) {
-        console.error(error)
-      }
+  columns = state.listPaginated?.headers?.map((header) => {
+    const filterName = header.Filter
+    if (filterName) {
+      const filterFunc = filters[filterName]
+      const filteredHeader = { ...header, Filter: filterFunc }
+      return filteredHeader
     }
+    return header
+  })
 
-    fetchData()
-  }, [])
-
-  // Define the existing columns array
-  const existingColumns = [
-    {
-      Header: 'Controls',
-      accessor: 'controls',
-      columnSize: 2,
-      Filter: () => null,
-      Cell: ({ value, row }) => {
-        const abilityLoad = DataDisplayConditions()
-        const showEdit = abilityLoad.abilities.includes('edit')
-        const showDelete = abilityLoad.abilities.includes('delete')
-        return (
-          <div className="row">
-            <div className="col-xl-12 justify-content-center">
-              {showEdit && (
-                <span>
-                  <button
-                    className="btn btn-primary controlBtn"
-                    onClick={() => handleEditClick(value)}
-                    data-id={value}
-                  >
-                    <FaEdit />
-                  </button>
-                </span>
-              )}
-              {showDelete && (
-                <span>
-                  <button
-                    className="btn btn-danger controlBtn"
-                    onClick={() => handleDeleteClick(value)}
-                    data-id={value}
-                  >
-                    <FaTrashAlt style={{ color: 'white' }} />
-                  </button>
-                </span>
-              )}
-            </div>
-          </div>
-        )
-      },
-    },
-  ]
-
-  // Combine the existing columns array with the fetched columns data
-  const combinedColumns = [...existingColumns, ...columns]
+  let combinedColumns = []
+  if (columns) {
+    combinedColumns = [...existingColumns, ...columns]
+  }
 
   return (
     <div>
-      <Table columns={combinedColumns} data={rowData} />
+      <Table columns={combinedColumns} data={rowData} setSearch={setSearch}/>
     </div>
   )
 }
