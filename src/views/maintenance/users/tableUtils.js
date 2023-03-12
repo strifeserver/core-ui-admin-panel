@@ -5,13 +5,26 @@ import { CFormInput, CFormSelect } from '@coreui/react'
 import { FaEdit, FaTrashAlt } from 'react-icons/fa'
 import abilityDetails from '../../../components/abilities/ability'
 
-export const DefaultColumnFilter = ({ column: { filterValue, preFilteredRows }, setSearch }) => (
+export const DefaultColumnFilter = ({
+  column: { filterValue, preFilteredRows, setFilter,accessor },
+  setSearch,
+}) => {
+
+    if(filterValue){
+        console.log('SEARCH',accessor)
+        console.log('VALUE OF',filterValue)
+    }
+  return (
     <CFormInput
       value={filterValue || ''}
-      onChange={(e) => setSearch(e.target.value || undefined)}
+      onChange={(e) => {
+        setFilter(e.target.value || undefined)
+        setSearch(filterValue)
+      }}
       placeholder={`Search ${preFilteredRows.length} records...`}
     />
   )
+}
 
 export const SelectColumnFilter = ({ column: { filterValue, setFilter, preFilteredRows, id } }) => {
   const options = React.useMemo(

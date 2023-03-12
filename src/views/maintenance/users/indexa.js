@@ -51,13 +51,13 @@ const filterByOpt = [
 ]
 
 // Define a default UI for filtering
-function GlobalFilter({ preGlobalFilteredRows, globalFilter, setGlobalFilter }) {
+function GlobalFilter({ preGlobalFilteredRows, globalFilter, setGlobalFilter, setSearch }) {
   const count = preGlobalFilteredRows.length
   const [value, setValue] = React.useState(globalFilter)
   const onChange = useAsyncDebounce((value) => {
     setGlobalFilter(value || undefined)
+    setSearch(value)
   }, 200)
-
   return (
     <span>
       Search:{' '}
@@ -82,12 +82,17 @@ fuzzyTextFilterFn.autoRemove = (val) => !val
 // --------------------------------------------------------------------------------------
 // Our table component
 function Table({ columns, data, setSearch }) {
-
   const defaultColumn = React.useMemo(
     () => ({
-      Filter: DefaultColumnFilter,
+      Filter: ({ column: { filterValue, preFilteredRows, setFilter, id } }) => (
+        <DefaultColumnFilter
+          column={{ filterValue, preFilteredRows, setFilter, accessor: id }}
+          setSearch={setSearch}
+          Header=""
+        />
+      ),
     }),
-    [],
+    [setSearch],
   )
 
   const {
@@ -144,6 +149,7 @@ function Table({ columns, data, setSearch }) {
               preGlobalFilteredRows={data}
               globalFilter={state.globalFilter}
               setGlobalFilter={setGlobalFilter}
+              setSearch={setSearch}
             />
           </CCol>
         </CRow>
@@ -172,7 +178,6 @@ function Table({ columns, data, setSearch }) {
                       <p style={{ textAlign: 'center', fontWeight: 'bold' }}>
                         {column.render('Header')}
                       </p>
-                      {console.log(column.render('Filter'))}
                       <div>{column.canFilter ? column.render('Filter') : null}</div>
                     </CCol>
                   )
@@ -264,7 +269,6 @@ function Table({ columns, data, setSearch }) {
   )
 }
 
-
 // --------------------------------------------------------------------------------------------------------
 function dataTable(props) {
   const state = useSelector((state) => state.campaign)
@@ -284,7 +288,7 @@ function dataTable(props) {
 
   let filteredObj = {}
   filteredObj[filterBy] = { filter: debounceQuery }
-  filteredObj = JSON.stringify(filteredObj)
+  // filteredObj = JSON.stringify(filteredObj)
 
   useEffect(() => {
     async function init() {
@@ -302,6 +306,9 @@ function dataTable(props) {
     const search = async () => {
       let page = 1
       setCurrentPage(page)
+      console.log(search)
+      console.log(filteredObj)
+      console.log('DOSEARCH')
       await dispatch(listProcessPaginated(page, filteredObj, limit))
       const item = store.getState().campaign.listPaginated
       setTotalCount(item.total)
@@ -332,6 +339,7 @@ function dataTable(props) {
     SelectColumnFilter: SelectColumnFilter,
   }
   columns = state.listPaginated?.headers?.map((header) => {
+    // console.log(header.accessor)
     const filterName = header.Filter
     if (filterName) {
       const filterFunc = filters[filterName]
@@ -348,7 +356,7 @@ function dataTable(props) {
 
   return (
     <div>
-      <Table columns={combinedColumns} data={rowData} setSearch={setSearch}/>
+      <Table columns={combinedColumns} data={rowData} setSearch={setSearch} />
     </div>
   )
 }
