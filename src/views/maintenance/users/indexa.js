@@ -80,6 +80,50 @@ function GlobalFilter({ preGlobalFilteredRows, globalFilter, setGlobalFilter, se
 // Let the table remove the filter if the string is empty
 fuzzyTextFilterFn.autoRemove = (val) => !val
 // --------------------------------------------------------------------------------------
+
+
+
+
+const TableHeader = React.memo(({ headerGroups }) => {
+  return (
+    <>
+      {headerGroups.map((headerGroup, i) => (
+        <CRow key={i} {...headerGroup.getHeaderGroupProps()} className="rowStyle">
+          {headerGroup.headers.map((column) => {
+            let displayHeader = abilityDetails(column.render('Header'))[
+              'display_table_header'
+            ]
+            return (
+              <CCol
+                key={column.id}
+                hidden={displayHeader}
+                className={`colStyle ${
+                  column.render('Header') === 'Controls' ? 'controls' : ''
+                }`}
+                {...column.getHeaderProps()}
+                xs={4}
+                sm={4}
+                md={4}
+                lg={3}
+                xl={column.columnSize ? column.columnSize : 2}
+              >
+                <p style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                  {column.render('Header')}
+                </p>
+                <div>{column.canFilter ? column.render('Filter') : null}</div>
+              </CCol>
+            )
+          })}
+        </CRow>
+      ))}
+    </>
+  );
+});
+
+
+
+
+
 // Our table component
 function Table({ columns, data, setSearch }) {
   const defaultColumn = React.useMemo(
@@ -155,35 +199,7 @@ function Table({ columns, data, setSearch }) {
         </CRow>
         <CCardBody>
           <div className="tableContainer">
-            {headerGroups.map((headerGroup, i) => (
-              <CRow key={i} {...headerGroup.getHeaderGroupProps()} className="rowStyle">
-                {headerGroup.headers.map((column) => {
-                  let displayHeader = abilityDetails(column.render('Header'))[
-                    'display_table_header'
-                  ]
-                  return (
-                    <CCol
-                      key={column.id}
-                      hidden={displayHeader}
-                      className={`colStyle ${
-                        column.render('Header') === 'Controls' ? 'controls' : ''
-                      }`}
-                      {...column.getHeaderProps()}
-                      xs={4}
-                      sm={4}
-                      md={4}
-                      lg={3}
-                      xl={column.columnSize ? column.columnSize : 2}
-                    >
-                      <p style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                        {column.render('Header')}
-                      </p>
-                      <div>{column.canFilter ? column.render('Filter') : null}</div>
-                    </CCol>
-                  )
-                })}
-              </CRow>
-            ))}
+          <TableHeader headerGroups={headerGroups} />
 
             <div {...getTableBodyProps()}>
               {page.map((row, i) => {
